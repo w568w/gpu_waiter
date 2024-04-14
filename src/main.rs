@@ -22,11 +22,13 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
+/// A simple tool to wait for idle GPUs, occupy them, and run a given command.
 struct Cli {
     /// How many GPUs to use
     #[arg(short, long, default_value_t=NonZeroU32::new(1).unwrap())]
     num: NonZeroU32,
 
+    /// An external command to run
     #[command(subcommand)]
     command: Commands,
 }
@@ -39,7 +41,7 @@ enum Commands {
 
 static NVML: OnceCell<Nvml> = OnceCell::new();
 
-fn get_empty_gpu() -> anyhow::Result<Vec<u32>> {
+fn get_idle_gpu() -> anyhow::Result<Vec<u32>> {
     let nvml = NVML.wait();
     let device_count = nvml.device_count()?;
     let mut result = Vec::with_capacity(device_count as usize);
@@ -77,29 +79,31 @@ fn main() -> anyhow::Result<()> {
     let device_count = nvml.device_count()?;
     if args.num.get() > device_count {
         return Err(anyhow::anyhow!(
-            "Requested {} devices, but only {} are available",
+            "Requested {} devices, but there are only {} devices in total",
             args.num,
             device_count
         ));
     }
 
+    // start waiting
+    info!("Start waiting at {}", chrono::Local::now().format("%H:%M:%S"));
     // show a spinner for polling
     let spinner = multi.add(indicatif::ProgressBar::new_spinner());
-    spinner.set_message("Waiting for empty GPUs...");
+    spinner.set_message("Waiting for idle GPUs...");
     spinner.enable_steady_tick(Duration::from_millis(500));
-    let mut empty_gpu = None;
-    // poll for empty GPUs
+    let mut idle_gpu = None;
+    // poll for idle GPUs
     while !STOPPED.load(std::sync::atomic::Ordering::Relaxed) {
-        let mut empty_gpus = get_empty_gpu()?;
-        if empty_gpus.len() >= args.num.get() as usize {
-            info!("Found {} empty GPUs!: {:?}", args.num, empty_gpus);
-            empty_gpus.splice(args.num.get() as usize.., std::iter::empty());
-            empty_gpu = Some(empty_gpus);
+        let mut idle_gpus = get_idle_gpu()?;
+        if idle_gpus.len() >= args.num.get() as usize {
+            info!("Found {} idle GPUs!: {:?}", args.num, idle_gpus);
+            idle_gpus.splice(args.num.get() as usize.., std::iter::empty());
+            idle_gpu = Some(idle_gpus);
             break;
         }
         spinner.set_message(format!(
-            "Waiting for empty GPUs... ({} available, {} requested) [Last check: {}]",
-            empty_gpus.len(),
+            "Waiting for idle GPUs... ({} available, {} requested) [Last check: {}]",
+            idle_gpus.len(),
             args.num,
             chrono::Local::now().format("%H:%M:%S")
         ));
@@ -110,13 +114,13 @@ fn main() -> anyhow::Result<()> {
     spinner.finish_and_clear();
     multi.remove(&spinner);
 
-    if let Some(empty_gpu) = empty_gpu {
-        info!("Occupying GPUs: {:?}", empty_gpu);
+    if let Some(idle_gpu) = idle_gpu {
+        info!("Occupying GPUs: {:?}", idle_gpu);
 
         let (device_used_s, device_used_r) = crossbeam_channel::unbounded();
         let (proc_exit_s, proc_exit_r) = crossbeam_channel::unbounded();
-        let occupantions = Arc::new(RwLock::new(Vec::with_capacity(empty_gpu.len())));
-        for i in &empty_gpu {
+        let occupantions = Arc::new(RwLock::new(Vec::with_capacity(idle_gpu.len())));
+        for i in &idle_gpu {
             let cuda_dev = cudarc::driver::CudaDevice::new(*i as usize)?;
             let nvml_dev = NVML.wait().device_by_index(*i)?;
             let free_mem = nvml_dev.memory_info()?.free;
@@ -125,7 +129,7 @@ fn main() -> anyhow::Result<()> {
             occupantions.write().push((*i, out));
         }
 
-        info!("GPUs occupied: {:?}", empty_gpu);
+        info!("GPUs occupied: {:?}", idle_gpu);
         let occp = occupantions.clone();
         thread::spawn(move || {
             'outer: while occp.read().len() > 0 {
@@ -154,7 +158,7 @@ fn main() -> anyhow::Result<()> {
             .args(&cmds[1..])
             .env(
                 "CUDA_VISIBLE_DEVICES",
-                empty_gpu
+                idle_gpu
                     .iter()
                     .map(|i| i.to_string())
                     .collect::<Vec<_>>()

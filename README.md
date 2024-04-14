@@ -21,7 +21,7 @@ $ gpu-waiter -n 2 env
 $ SOME_VAR=1 gpu-waiter env
 ```
 
-# 等 GPU
+# GPU 排队器
 
 自动等待一个（或一些）NVIDIA GPU 可用，然后运行一个程序。不再需要手动查看 `nvidia-smi` 排队！
 
