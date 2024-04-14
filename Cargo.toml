@@ -2,6 +2,7 @@
 name = "gpu-waiter"
 version = "0.1.0"
 edition = "2021"
+authors = ["Malachi Xu <w568w@outlook.com>"]
 
 [profile.release]
 opt-level = 3

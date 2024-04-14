@@ -21,7 +21,10 @@ use parking_lot::RwLock;
 static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version, about, author, long_about = None)]
+#[command(
+    help_template = "{before-help}{about-with-newline}\nAuthor: {author-with-newline}\n{usage-heading} {usage}\n\n{all-args}{after-help}"
+)]
 /// A simple tool to wait for idle GPUs, occupy them, and run a given command.
 struct Cli {
     /// How many GPUs to use
