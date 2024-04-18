@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Print current time before starting waiting.
+### Fixed
+- Add a file-based lock to prevent concurrent grabbing of the same GPU.
 ### Changed
 - Some texts in the program.
 - Replace word "empty" with "idle".

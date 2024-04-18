@@ -17,6 +17,8 @@ use nvml_wrapper::Nvml;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 
+mod lock;
+
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -95,15 +97,21 @@ fn main() -> anyhow::Result<()> {
     spinner.set_message("Waiting for idle GPUs...");
     spinner.enable_steady_tick(Duration::from_millis(500));
     let mut idle_gpu = None;
+    // init global file lock
+    let file_lock = lock::FileRWLock::new("gpu-waiter.lock")?;
+    let mut lock_guard = None;
     // poll for idle GPUs
     while !STOPPED.load(std::sync::atomic::Ordering::Relaxed) {
+        let guard_in_loop = file_lock.write()?;
         let mut idle_gpus = get_idle_gpu()?;
         if idle_gpus.len() >= args.num.get() as usize {
             info!("Found {} idle GPUs!: {:?}", args.num, idle_gpus);
             idle_gpus.splice(args.num.get() as usize.., std::iter::empty());
             idle_gpu = Some(idle_gpus);
+            lock_guard = Some(guard_in_loop);
             break;
         }
+        drop(guard_in_loop);
         spinner.set_message(format!(
             "Waiting for idle GPUs... ({} available, {} requested) [Last check: {}]",
             idle_gpus.len(),
@@ -133,6 +141,11 @@ fn main() -> anyhow::Result<()> {
         }
 
         info!("GPUs occupied: {:?}", idle_gpu);
+        // after occupying, drop the lock guard
+        if let Some(guard) = lock_guard {
+            drop(guard);
+        }
+        
         let occp = occupantions.clone();
         thread::spawn(move || {
             'outer: while occp.read().len() > 0 {
