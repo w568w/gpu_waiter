@@ -4,11 +4,12 @@ use std::{
     num::NonZeroU32,
     process::Command,
     sync::{atomic::AtomicBool, Arc},
-    thread, time::Duration,
+    thread,
+    time::Duration,
 };
 
 use clap::{Parser, Subcommand};
-use crossbeam_channel::select;
+use crossbeam_channel::{select, never};
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{error, info, warn};
@@ -91,7 +92,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     // start waiting
-    info!("Start waiting at {}", chrono::Local::now().format("%H:%M:%S"));
+    info!(
+        "Start waiting at {}",
+        chrono::Local::now().format("%H:%M:%S")
+    );
     // show a spinner for polling
     let spinner = multi.add(indicatif::ProgressBar::new_spinner());
     spinner.set_message("Waiting for idle GPUs...");
@@ -145,7 +149,7 @@ fn main() -> anyhow::Result<()> {
         if let Some(guard) = lock_guard {
             drop(guard);
         }
-        
+
         let occp = occupantions.clone();
         thread::spawn(move || {
             'outer: while occp.read().len() > 0 {
@@ -184,13 +188,23 @@ fn main() -> anyhow::Result<()> {
         thread::spawn(move || {
             let _ = proc_exit_s.send(cmd.wait());
         });
-        select! {
-            recv(device_used_r) -> res => {
-                let used_index = res??;
-                occupantions.write().retain(|(j, _)| *j != used_index);
-            }
-            recv(proc_exit_r) -> res => {
-                let _ = res??;
+        
+        let mut device_used_r = Some(&device_used_r);
+        'select: while !STOPPED.load(std::sync::atomic::Ordering::Relaxed) {
+            select! {
+                recv(device_used_r.unwrap_or(&never())) -> res => {
+                    if matches!(res, Err(_)) {
+                        device_used_r = None;
+                    } else {
+                        let used_index = res??;
+                        occupantions.write().retain(|(j, _)| *j != used_index);
+                    }
+                }
+                recv(proc_exit_r) -> res => {
+                    let status = res??;
+                    info!("Process exited with status: {}", status);
+                    break 'select;
+                }
             }
         }
     }
