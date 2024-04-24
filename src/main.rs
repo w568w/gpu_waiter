@@ -77,6 +77,7 @@ fn main() -> anyhow::Result<()> {
 
     if std::env::var("CUDA_VISIBLE_DEVICES").is_ok() {
         warn!("CUDA_VISIBLE_DEVICES is already set, which will be ignored");
+        std::env::remove_var("CUDA_VISIBLE_DEVICES");
     }
     NVML.get_or_try_init(Nvml::init)?;
 

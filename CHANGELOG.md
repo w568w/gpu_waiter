@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The external command exits immediately after it starts using the GPU, because:
     - We only waited for the first message, with a `select!` without loop;
     - We didn't catch the disconnected error after the GPU monitor thread exits.
+- Really "ignore" `CUDA_VISIBLE_DEVICES` environment variable by explicitly removing it.
 ## [0.1.1] - 2024-04-18
 ### Added
 - Print current time before starting waiting.
