@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - We only waited for the first message, with a `select!` without loop;
     - We didn't catch the disconnected error after the GPU monitor thread exits.
 - Really "ignore" `CUDA_VISIBLE_DEVICES` environment variable by explicitly removing it.
+- On Linux distributions with `fs.protected_regular` enabled, we will fail to `create` (i.e. open) an existing lock file.
 ## [0.1.1] - 2024-04-18
 ### Added
 - Print current time before starting waiting.
