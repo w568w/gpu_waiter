@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- [BREAKING] Add a new feature to allow the user to dynamically insert GPU IDs to their command line arguments. A new argument `-f` to force `CUDA_VISIBLE_DEVICES` to be set while inserting GPU IDs at the same time.
+
 ### Fixed
 - The external command exits immediately after it starts using the GPU, because:
     - We only waited for the first message, with a `select!` without loop;

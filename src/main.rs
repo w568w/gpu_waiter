@@ -1,4 +1,6 @@
 #![feature(try_blocks)]
+#![feature(anonymous_lifetime_in_impl_trait)]
+
 use std::{
     ffi::OsString,
     num::NonZeroU32,
@@ -9,7 +11,8 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
-use crossbeam_channel::{select, never};
+use crossbeam_channel::{never, select};
+use either::Either;
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{error, info, warn};
@@ -18,6 +21,7 @@ use nvml_wrapper::Nvml;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 
+mod command;
 mod lock;
 
 #[global_allocator]
@@ -31,10 +35,20 @@ static GLOBAL: MiMalloc = MiMalloc;
 /// A simple tool to wait for idle GPUs, occupy them, and run a given command.
 struct Cli {
     /// How many GPUs to use
-    #[arg(short, long, default_value_t=NonZeroU32::new(1).unwrap())]
+    #[arg(short, long, default_value_t = NonZeroU32::new(1).unwrap())]
     num: NonZeroU32,
 
-    /// An external command to run
+    /// Force to run the command with CUDA_VISIBLE_DEVICES set to the selected GPUs, even if {} is present in the command.
+    #[arg(short, long, default_value = "false")]
+    force_env: bool,
+
+    /// An external command to run. If {} is present in the command, it will be replaced with the ids of the GPUs and CUDA_VISIBLE_DEVICES will NOT be set.
+    ///
+    /// For example, `gpu-waiter --num 2 deepspeed --include localhost:{}` could run `deepspeed --include localhost:1,3`.
+    ///
+    /// If you want to run a command with {} and set CUDA_VISIBLE_DEVICES, you should use `-f` option.
+    ///
+    /// If you need literal `{}` in the command, you should escape it with `{{` and `}}`, e.g., `gpu-waiter --num 2 echo {{}}`.
     #[command(subcommand)]
     command: Commands,
 }
@@ -93,6 +107,26 @@ fn main() -> anyhow::Result<()> {
             args.num,
             device_count
         ));
+    }
+
+    // prevalidate the command
+    let Commands::External(cmds) = args.command;
+    let mut preprocess_cmd: Vec<Either<OsString, String>> = Vec::with_capacity(cmds.len());
+    let mut has_template = false;
+    for arg in cmds {
+        if let Some(arg) = arg.to_str() {
+            let result = command::process_command_template(arg, "")?;
+            if result.template_count > 0 {
+                if !has_template {
+                    info!("The command contains template \"{{}}\", so CUDA_VISIBLE_DEVICES will NOT be set");
+                }
+                has_template = true;
+            }
+            preprocess_cmd.push(Either::Right(arg.to_string()));
+        } else {
+            warn!("Failed to parse the argument you passed in: \"{:?}\", most likely it contains invalid UTF-8 characters. This argument will be ignored for inserting GPU ids.", arg);
+            preprocess_cmd.push(Either::Left(arg));
+        }
     }
 
     // start waiting
@@ -177,22 +211,42 @@ fn main() -> anyhow::Result<()> {
             }
         });
 
-        let Commands::External(cmds) = args.command;
-        let mut cmd = Command::new(&cmds[0])
-            .args(&cmds[1..])
-            .env(
-                "CUDA_VISIBLE_DEVICES",
-                idle_gpu
-                    .iter()
-                    .map(|i| i.to_string())
-                    .collect::<Vec<_>>()
-                    .join(","),
-            )
-            .spawn()?;
+        let gpu_list_str = idle_gpu
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let mut final_cmd = Vec::with_capacity(preprocess_cmd.len());
+        for arg in preprocess_cmd {
+            match arg {
+                Either::Left(arg) => {
+                    final_cmd.push(arg);
+                }
+                Either::Right(arg) => {
+                    let result = command::process_command_template(&arg, &gpu_list_str)?;
+                    final_cmd.push(OsString::from(result.command));
+                }
+            }
+        }
+        let mut cmd = Command::new(&final_cmd[0]);
+        if !has_template || args.force_env {
+            cmd.env("CUDA_VISIBLE_DEVICES", &gpu_list_str);
+        } else {
+            info!("CUDA_VISIBLE_DEVICES is NOT set because the command contains template");
+        }
+        if has_template {
+            info!(
+                "The command will be run as: {:?}",
+                final_cmd.join(&OsString::from(" "))
+            );
+        }
+        let mut cmd = cmd.args(&final_cmd[1..]).spawn()?;
+
         thread::spawn(move || {
             let _ = proc_exit_s.send(cmd.wait());
         });
-        
+
         let mut device_used_r = Some(&device_used_r);
         'select: while !STOPPED.load(std::sync::atomic::Ordering::Relaxed) {
             select! {

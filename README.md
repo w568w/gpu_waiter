@@ -28,6 +28,10 @@ $ gpu-waiter python my_program.py
 $ gpu-waiter -n 2 env
 # Wait for one GPU and run "env" with environment variables
 $ SOME_VAR=1 gpu-waiter env
+# Wait for two GPUs and run "deepspeed" with the allocated GPU IDs. Will run `deepspeed --include localhost:0,1 my_program.py` for example. Note: `CUDA_VISIBLE_DEVICES` will NOT be set in this case! If you do need it, use `-f` to force setting `CUDA_VISIBLE_DEVICES`.
+$ gpu-waiter -n 2 deepspeed --include localhost:{} my_program.py
+# If "{" and "}" are literally needed in the command, use "{{" and "}}" instead. Will run `echo a pair of curly braces: {}` for example.
+$ gpu-waiter -n 2 echo a pair of curly braces: {{}}
 ```
 
 ## Caveats
@@ -64,6 +68,10 @@ $ gpu-waiter python my_program.py
 $ gpu-waiter -n 2 env
 # 等待一个 GPU 并运行带环境变量的 "env"
 $ SOME_VAR=1 gpu-waiter env
+# 等待两个 GPU 并运行分配到的 GPU ID 的 "deepspeed"。例如，下面的命令将运行 `deepspeed --include localhost:0,1 my_program.py`。注意：在这种情况下，`CUDA_VISIBLE_DEVICES` 不会被设置！如果需要设置它，请使用 `-f` 指示强制设置 `CUDA_VISIBLE_DEVICES`。
+$ gpu-waiter -n 2 deepspeed --include localhost:{} my_program.py
+# 如果命令中需要 "{" 和 "}" 字面量，请使用 "{{" 和 "}}"。例如，下面的命令将运行 `echo a pair of curly braces: {}`。
+$ gpu-waiter -n 2 echo a pair of curly braces: {{}}
 ```
 
 ## 缺陷
