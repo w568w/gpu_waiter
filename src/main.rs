@@ -79,11 +79,14 @@ fn main() -> anyhow::Result<()> {
         warn!("CUDA_VISIBLE_DEVICES is already set, which will be ignored");
         std::env::remove_var("CUDA_VISIBLE_DEVICES");
     }
-    NVML.get_or_try_init(Nvml::init)?;
+    NVML.get_or_try_init(|| {
+        Nvml::builder()
+            .lib_path("libnvidia-ml.so.1".as_ref())
+            .init()
+    })?;
 
     let args = Cli::parse();
-    let nvml = Nvml::init()?;
-    let device_count = nvml.device_count()?;
+    let device_count = NVML.wait().device_count()?;
     if args.num.get() > device_count {
         return Err(anyhow::anyhow!(
             "Requested {} devices, but there are only {} devices in total",

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - We didn't catch the disconnected error after the GPU monitor thread exits.
 - Really "ignore" `CUDA_VISIBLE_DEVICES` environment variable by explicitly removing it.
 - On Linux distributions with `fs.protected_regular` enabled, we will fail to `create` (i.e. open) an existing lock file.
+- On Linux the NVML library path is being migrated to `libnvidia-ml.so.1` from `libnvidia-ml.so`. See <https://github.com/Cldfire/nvml-wrapper/pull/63> for details.
+
 ## [0.1.1] - 2024-04-18
 ### Added
 - Print current time before starting waiting.
