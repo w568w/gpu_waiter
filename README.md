@@ -9,6 +9,7 @@ Automatically wait for a NVIDIA GPU (or some) to be available, and then run a pr
 - Support waiting for multiple GPUs
 - Automatically hold the GPUs for you - by occupying them with 1/4 free GPU memory; automatically release them when the target program starts using GPUs
 - Handle concurrency hold of the same GPU with a file-based lock
+- Support quirks like DeepSpeed's `--include` flag
 
 ## How would you compare it with X?
 There are some similar tools like [NvidiaGPUWaiter](https://github.com/andsfonseca/NvidiaGPUWaiter) and [GrabGPU](https://github.com/godweiyang/GrabGPU/). The main differences are:
@@ -49,6 +50,7 @@ $ gpu-waiter -n 2 echo a pair of curly braces: {{}}
 - 支持等待多个 GPU
 - 自动为你占用 GPU - 用 1/4 空闲显存占住 GPU；当目标程序开始使用 GPU 时，自动释放被占用的显存
 - 通过文件锁处理对同一个 GPU 的并发占用
+- 支持 DeepSpeed 的 `--include` 标志等特殊情况
 
 ## 与其他工具的比较
 有一些类似的工具，如 [NvidiaGPUWaiter](https://github.com/andsfonseca/NvidiaGPUWaiter) 和 [GrabGPU](https://github.com/godweiyang/GrabGPU/)。主要区别在于：
