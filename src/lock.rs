@@ -96,7 +96,7 @@ impl FileRWLock {
     }
 
     pub fn read(&self) -> io::Result<RWLockReadGuard<'_>> {
-        self.file.lock_shared()?;
+        fs4::FileExt::lock_shared(&self.file)?;
         Ok(RWLockReadGuard { _lock: self })
     }
 
@@ -108,12 +108,12 @@ impl FileRWLock {
 
 impl Drop for RWLockReadGuard<'_> {
     fn drop(&mut self) {
-        self._lock.file.unlock().expect("Failed to unlock file");
+        fs4::FileExt::unlock(&self._lock.file).expect("Failed to unlock file");
     }
 }
 
 impl Drop for RWLockWriteGuard<'_> {
     fn drop(&mut self) {
-        self._lock.file.unlock().expect("Failed to unlock file");
+        fs4::FileExt::unlock(&self._lock.file).expect("Failed to unlock file");
     }
 }
